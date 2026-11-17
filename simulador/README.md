@@ -18,15 +18,15 @@ not implemented.
 ## Quickstart
 
 ```bash
-# validation suite (15 tests, deterministic traces + invariants)
+# validation suite (17 tests, deterministic traces + invariants)
 python3 -m unittest simulador.tests.test_sim
 
 # smoke: 2 reps, M2, rho 0.9, all policies (< 1 s)
 python3 -m simulador.run --n 2000 --warmup 200 --reps 2 \
   --mix M2 --rho 0.9 --out /tmp/opencode/smoke
 
-# full protocol (Etapa 5 defaults): ~3240 runs, order of 15 min (pilot refines)
-python3 -m simulador.run --out simulador/results
+# full protocol (Etapa 5 defaults): 3600 runs, ~25 min
+python3 -m simulador.run --out results
 ```
 
 ## Outputs (`--out`)
@@ -36,7 +36,12 @@ python3 -m simulador.run --out simulador/results
   `compliance`, `ed_class`, `ed_rate`.
 - `summary_system.csv`: one row per (policy, mix, ρ, rep, seed) with
   `busy_frac` (sanity), overtakings (total/same/cross), displacement,
-  DF (`df_var`, `df_c`, `df_max`), `ed2`, `bound_holds`.
+  DF (`df_var`, `df_c`, `df_max`), `ed2`, `bound_holds`, and total wait
+  over all tickets (`wait_sum_all`) and over kept tickets (`wait_sum_kept`)
+  for the conservation check.
+- `wait_hist.csv.gz`: sparse per-class wait histogram of kept tickets
+  (bin width 0.25 time units: `bin_lo`, `count`). Any starvation threshold
+  or survival curve P(W > t) is recomputed from it without rerunning.
 - `traces.csv` only with `--save-traces` (large; not for the full run).
 
 ## Reproduction contract
@@ -60,10 +65,12 @@ python3 -m simulador.run --out simulador/results
 
 ## Validation evidence
 
-- 15 unit tests: hand-computed P0(k) traces (forced normal, k=1
-  alternation, idle/normal reset, k=inf = strict), APQ catch-up,
-  WRR cycle, FCFS zero-overtake, no-duplicate/lost, work conservation,
-  determinism, RAQFM identities.
+- 17 unit tests: hand-computed P0(k) traces (forced normal, k=1
+  alternation, reset on Normal, history persisting across idle as in
+  production, k=inf = strict), APQ catch-up, WRR cycle, FCFS
+  zero-overtake, no-duplicate/lost, work conservation, total wait
+  identical across all policies (sample-path conservation), determinism,
+  RAQFM identities, wait histogram.
 - M/D/1 theory check (FCFS, single rep): ρ=0.5 → sim 0.506 vs 0.500;
   ρ=0.9 → sim 4.649 vs 4.500 (P-K formula). Matches.
 - Smoke mixes/loads produce the expected ordering effect (strict widens

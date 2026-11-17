@@ -1,6 +1,6 @@
 """Scheduling policies (SPEC Etapa 3, Desenvolvimento Modelagem).
 
-FCFS, strict (= P0 with k=inf), P0(k) with k in {1, 3, 5}, accumulating
+FCFS, strict (= P0 with k=inf), P0(k) with k in {1, 2, 3, 5}, accumulating
 priority (APQ) and weighted round robin (WRR). All rules have total
 tie-breaking: no residual ties.
 """
@@ -31,8 +31,11 @@ class P0(Policy):
     Strict nonpreemptive ``priority DESC, arrival ASC, id ASC``, except the
     next call is forced to Normal when the ``k`` previous calls were all
     priority (``p > 0``) and a Normal ticket is waiting. The consecutive
-    counter resets on every Normal service and on every idle period.
-    ``k = 3`` reproduces production; ``k = inf`` degenerates to strict.
+    counter resets on every Normal service only. It does NOT reset on idle
+    periods: production reads the last 3 ``Called`` tickets of the queue
+    with no time filter, and served tickets stay ``Called``, so the history
+    crosses idle periods (and days). ``k = 3`` reproduces production;
+    ``k = inf`` degenerates to strict.
     """
 
     def __init__(self, k: float = 3) -> None:
@@ -43,7 +46,8 @@ class P0(Policy):
         self.consecutive = 0
 
     def on_idle(self) -> None:
-        self.consecutive = 0
+        # Sem zeramento: produção não detecta ociosidade (últimos 3 Called persistem).
+        pass
 
     def after_serve(self, ticket: Ticket) -> None:
         if ticket.priority > 0:
@@ -87,7 +91,7 @@ class WRR(Policy):
     weight, e.g. (1, 2, 3) -> [20, 20, 20, 10, 10, 0]. The pointer advances
     past empty classes (work-conserving skip) and resumes after the served
     class. Within a class, FIFO. Roots: Demers et al. 1989; Parekh &
-    Gallardo 1993.
+    Gallager 1993.
     """
 
     def __init__(self, weights: dict[int, float]) -> None:

@@ -47,12 +47,17 @@ class TestPolicies(unittest.TestCase):
         done = run(copy_tickets(ts), P0(3), 1.0)
         self.assertEqual([t.id for t in done], [0, 1, 2, 3, 4, 5])
 
-    def test_p0_idle_resets(self):
-        ts = [T(0, 0.0, 20), T(1, 0.1, 20), T(2, 5.0, 0), T(3, 5.1, 20)]
+    def test_p0_history_persists_across_idle(self):
+        # Two priority calls (0-1, 1-2), then idle until 5.0. A priority (id 2)
+        # and a normal (id 3) arrive together at 5.0. History persists across
+        # idle (production: last Called tickets have no time filter), so with
+        # k=2 the counter is still 2 and the normal is forced first. A reset on
+        # idle would serve the priority first, as strict priority does.
+        ts = [T(0, 0.0, 20), T(1, 0.1, 20), T(2, 5.0, 20), T(3, 5.0, 0)]
         done = run(copy_tickets(ts), P0(2), 1.0)
-        # c=2 at t=2 but queue holds only... T2 normal arrives at idle:
-        # served immediately, then T3. Order must be arrival order here.
-        self.assertEqual([t.id for t in done], [0, 1, 2, 3])
+        self.assertEqual([t.id for t in done], [0, 1, 3, 2])
+        strict = run(copy_tickets(ts), StrictPriority(), 1.0)
+        self.assertEqual([t.id for t in strict], [0, 1, 2, 3])
 
     def test_p0_inf_equals_strict(self):
         base = generate(50, 0.8, {0: 0.6, 10: 0.3, 20: 0.1}, seed=7)
@@ -97,6 +102,19 @@ class TestInvariants(unittest.TestCase):
                            if t.arrival <= prev.completion and t.start >= cur.start]
                 self.assertEqual(waiting, [])
 
+    def test_total_wait_invariant_across_policies(self):
+        # Equal deterministic service + work conservation: service start times
+        # depend only on arrivals, so total wait is identical for every
+        # policy on the same input (sample-path conservation).
+        from simulador.run import ALL, POLICY_SETS
+        base = generate(2000, 0.95, {0: 0.4, 10: 0.4, 20: 0.2}, seed=21)
+        totals = []
+        for key in ALL:
+            done = run(copy_tickets(base), POLICY_SETS[key]["make"](), 1.0)
+            totals.append(sum(t.wait for t in done))
+        for tot in totals[1:]:
+            self.assertAlmostEqual(tot, totals[0], places=6)
+
     def test_fcfs_zero_overtake(self):
         base = generate(100, 0.7, {0: 0.7, 10: 0.2, 20: 0.1}, seed=5)
         done = run(copy_tickets(base), FCFS(), 1.0)
@@ -126,6 +144,16 @@ class TestMetrics(unittest.TestCase):
             _, sys, extra = raqfm(done, 1.0)
             self.assertAlmostEqual(sys["ed_mean"], 0.0, places=9)
             self.assertTrue(extra["bound_holds"])
+
+    def test_wait_histogram(self):
+        from simulador.metrics import wait_histogram
+        ts = [T(0, 0.0, 0), T(1, 0.1, 0), T(2, 0.2, 10)]
+        done = run(copy_tickets(ts), FCFS(), 1.0)
+        # waits: 0.0 (c0), 0.9 (c0), 1.8 (c10); bin width 0.25
+        h = wait_histogram(done)
+        self.assertEqual(h[0], {0: 1, 3: 1})
+        self.assertEqual(h[10], {7: 1})
+        self.assertEqual(h[20], {})
 
     def test_politeness_bounded(self):
         base = generate(200, 0.9, {0: 0.5, 10: 0.3, 20: 0.2}, seed=17)

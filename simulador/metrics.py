@@ -224,6 +224,25 @@ def politeness(tickets: list[Ticket]) -> dict[int, float]:
     return out
 
 
+HIST_BIN = 0.25
+"""Width (time units) of the per-class wait histogram bins."""
+
+
+def wait_histogram(tickets: list[Ticket], width: float = HIST_BIN) -> dict[int, dict[int, int]]:
+    """Sparse per-class wait histogram: ``{class: {bin: count}}``.
+
+    Bin ``b`` holds waits in ``[b * width, (b + 1) * width)``. Any threshold
+    or survival curve P(W > t) can be recomputed from it at analysis time
+    without rerunning (exact at bin edges).
+    """
+    hist: dict[int, dict[int, int]] = {p: {} for p in CLASSES}
+    for t in tickets:
+        b = int(math.floor(t.wait / width + 1e-9))
+        h = hist[t.priority]
+        h[b] = h.get(b, 0) + 1
+    return hist
+
+
 def summarize(
     tickets: list[Ticket],
     service: float = 1.0,
