@@ -14,6 +14,9 @@ Sections (default: all, in this order):
     order       overtakings, displacement, class gap, politeness
     starv       per-class fraction of waits >= 15 min for S in {1,2,3,5} min
     inversion   class-order inversions (c10 > c0, c20 > c10) per policy
+    claims      numbers quoted in the text: k share of strict effect, spread
+                across policies, minimum tail/variance, politeness by class
+    latex       table rows / figure coordinates for the article (pt-BR)
     validation  P-K and Cobham again on results/validation/<mix>/ (FCFS and
                 Estrita, 300 independent seeds 1001-1300), if present
 
@@ -323,12 +326,146 @@ def s_validation(results, **_):
     title = f"\n  extended: {len(reps)} independent replications per scenario"
     s_pk(sysr, reps, title=title)
     s_cobham(cls, reps, title=title)
+    s_lindley(sysr_main=None)
+
+
+def s_lindley(results=None, sysr=None, reps=None, sysr_main=None, **_):
+    """Independent M/D/1 FCFS check: Lindley recursion on the same arrivals."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from simulador.arrivals import MIXES as AMIX, generate
+    header("Independent check: Lindley recursion W_{n+1} = max(0, W_n + S - A_{n+1}),"
+           " FCFS, seeds 1-30, n = 20000 after 2000 warm-up")
+    for r in RHOS:
+        means = []
+        for seed in range(1, 31):
+            free, ws = 0.0, []
+            for t in generate(22000, r, AMIX["M2"], seed):
+                st = max(free, t.arrival)
+                ws.append(st - t.arrival)
+                free = st + 1.0
+            means.append(avg(ws[2000:]))
+        print(f"  rho={r}: Lindley mean {avg(means):.4f}   (theory {r / (2 * (1 - r)):.3f})")
+
+
+def c0_mean(cls, p, m, r, reps):
+    return avg(per_rep(cls, p, m, r, 0, "mean", reps))
+
+
+def s_claims(cls, sysr, reps, **_):
+    header("Claims quoted in the text")
+    print("\nShare of the strict effect on class 0 captured by P0(k):"
+          " (P0(k) - FCFS) / (Estrita - FCFS)")
+    for m, r in scenarios():
+        f, e = c0_mean(cls, "FCFS", m, r, reps), c0_mean(cls, "P0(k=inf)", m, r, reps)
+        print(f"  {m} rho={r}: " + "  ".join(
+            f"k={k}: {100 * (c0_mean(cls, f'P0(k={k})', m, r, reps) - f) / (e - f):6.1f}%"
+            for k in (1, 2, 3, 5)))
+    print("\nSpread of class-0 mean wait across the 10 policies (max - min),"
+          " ratio to rho = 0.75")
+    for m in MIXES:
+        sp = {r: max(c0_mean(cls, p, m, r, reps) for p in POLICIES)
+              - min(c0_mean(cls, p, m, r, reps) for p in POLICIES) for r in RHOS}
+        print(f"  {m}: " + "  ".join(f"rho={r}: {sp[r]:.3f} ({sp[r] / sp[0.75]:.1f}x)"
+                                     for r in RHOS))
+    print("\nPolicy with the smallest class-0 p99 / variance (mean over reps)")
+    for m, r in scenarios():
+        p99 = {p: avg(per_rep(cls, p, m, r, 0, "p99", reps)) for p in POLICIES}
+        var = {p: avg(per_rep(cls, p, m, r, 0, "var", reps)) for p in POLICIES}
+        a, b = min(p99, key=p99.get), min(var, key=var.get)
+        print(f"  {m} rho={r}: p99 {NAME[a]} {p99[a]:.2f} (FCFS {p99['FCFS']:.2f})"
+              f"   var {NAME[b]} {var[b]:.2f} (FCFS {var['FCFS']:.2f})")
+    print("\nP0(k=5) and WRR(1,3,6) lie between P0(k=3) and Estrita on class 0 (M2)?")
+    for r in RHOS:
+        lo, hi = c0_mean(cls, "P0(k=3)", "M2", r, reps), c0_mean(cls, "P0(k=inf)", "M2", r, reps)
+        print(f"  rho={r}: " + "  ".join(
+            f"{NAME[p]} {'yes' if lo <= c0_mean(cls, p, 'M2', r, reps) <= hi else 'NO'}"
+            for p in ("P0(k=5)", "WRR(1,3,6)", "WRR(1,2,3)")))
+
+
+def br(x, d=2):
+    """pt-BR decimal comma, thin space for thousands."""
+    txt = f"{x:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", "\\,")
+    return txt
+
+
+def s_latex(cls, sysr, hist, reps, results, **_):
+    header("LaTeX rows (paste into 04-desenvolvimento.tex)")
+    mean = lambda p, m, r, c: avg(per_rep(cls, p, m, r, c, "mean", reps))
+
+    print("\n% tab:espera-m2  (M2, rho 0.9 | 0.95; c0 c10 c20)")
+    for p in POLICIES:
+        print(f"{NAME[p]} & " + " & ".join(br(mean(p, "M2", r, c))
+              for r in (0.9, 0.95) for c in CLASSES) + " \\\\")
+
+    print("\n% tab:espera-misturas  (rho 0.9; M1 | M3; c0 c10 c20)")
+    for p in POLICIES:
+        print(f"{NAME[p]} & " + " & ".join(br(mean(p, m, 0.9, c))
+              for m in ("M1", "M3") for c in CLASSES) + " \\\\")
+
+    print("\n% tab:ordem-m2  (M2, rho 0.9; overtakings, disp, gap, pol c0 c10 c20, var c0)")
+    for p in POLICIES:
+        sv = lambda k: avg([sysr[(p, "M2", 0.9, rep)][k] for rep in reps])
+        eds = [avg(per_rep(cls, p, "M2", 0.9, c, "ed_class", reps)) for c in CLASSES]
+        print(f"{NAME[p]} & {br(sv('overtake_total'), 0)} & {br(sv('disp_mean_abs'))} & "
+              f"{br(max(eds) - min(eds))} & " + " & ".join(
+                  br(avg(per_rep(cls, p, "M2", 0.9, c, "pol_mean", reps))) for c in CLASSES)
+              + f" & {br(avg(per_rep(cls, p, 'M2', 0.9, 0, 'var', reps)))} \\\\")
+
+    print("\n% tab:cauda-m2  (M2, rho 0.9; p90 p99 max for c0 | c10 | c20)")
+    for p in POLICIES:
+        print(f"{NAME[p]} & " + " & ".join(
+            br(avg(per_rep(cls, p, "M2", 0.9, c, met, reps)), 1)
+            for c in CLASSES for met in ("p90", "p99", "max")) + " \\\\")
+
+    if hist is not None:
+        print("\n% tab:starvation  (% waits >= 15 min, rho 0.9; c0 in M2 | c10 in M3;"
+              " S = 1 2 3 5)")
+        for p in POLICIES:
+            cells = []
+            for m, c in (("M2", 0), ("M3", 10)):
+                for sm in S_MINUTES:
+                    cells.append(br(100 * avg([frac_ge(hist[(p, m, 0.9, rep, c)],
+                                                       STARV_MIN / sm) for rep in reps]), 1))
+            print(f"{NAME[p]} & " + " & ".join(cells) + " \\\\")
+
+    print("\n% fig:curva-rho-m2  (class 0, M2; mean with bootstrap 95% CI as"
+          " asymmetric error bars)")
+    for p in ("FCFS", "P0(k=1)", "P0(k=2)", "P0(k=3)", "P0(k=inf)",
+              "APQ-soft", "APQ-aggr", "WRR(1,2,3)"):
+        pts = []
+        for r in RHOS:
+            m_, lo, hi = boot_ci(per_rep(cls, p, "M2", r, 0, "mean", reps))
+            pts.append(f"({r},{m_:.3f}) += (0,{hi - m_:.3f}) -= (0,{m_ - lo:.3f})")
+        print(f"% {NAME[p]}\n" + " ".join(pts))
+
+    vdir = results / "validation"
+    if vdir.is_dir():
+        vcls, vsys = {}, {}
+        for d in sorted(x for x in vdir.iterdir() if x.is_dir()):
+            c, sy = load(d)
+            vcls.update(c)
+            vsys.update(sy)
+        vreps = reps_of(vsys)
+        ci = lambda t: f"{br(t[0], 3)} [{br(t[1], 3)}; {br(t[2], 3)}]"
+        print("\n% tab:validacao-pk  (rho, theory, 30 reps, 300 reps; FCFS overall)")
+        for r in RHOS:
+            print(f"{br(r)} & {br(r / (2 * (1 - r)), 3)} & "
+                  f"{ci(boot_ci([overall_mean(sysr, 'FCFS', 'M2', r, x) for x in reps]))} & "
+                  f"{ci(boot_ci([overall_mean(vsys, 'FCFS', 'M2', r, x) for x in vreps]))} \\\\")
+        print("\n% tab:validacao-cobham  (M2; rho, class, theory, 30 reps, 300 reps; Estrita)")
+        for r in RHOS:
+            th = cobham("M2", r)
+            for c in CLASSES:
+                print(f"{br(r)} & {c} & {br(th[c], 3)} & "
+                      f"{ci(boot_ci(per_rep(cls, 'P0(k=inf)', 'M2', r, c, 'mean', reps)))} & "
+                      f"{ci(boot_ci(per_rep(vcls, 'P0(k=inf)', 'M2', r, c, 'mean', vreps)))} \\\\")
 
 
 SECTIONS = {"names": s_names, "integrity": s_integrity, "pk": s_pk,
             "cobham": s_cobham, "wait": s_wait, "tail": s_tail, "diffs": s_diffs,
             "order": s_order, "starv": s_starv, "inversion": s_inversion,
-            "validation": s_validation}
+            "claims": s_claims, "latex": s_latex, "validation": s_validation}
 
 
 def main() -> None:
@@ -339,7 +476,7 @@ def main() -> None:
     res = Path(a.results)
     cls, sysr = load(res)
     reps = reps_of(sysr)
-    hist = load_hist(res) if "starv" in a.only else None
+    hist = load_hist(res) if {"starv", "latex"} & set(a.only) else None
     for s in a.only:
         SECTIONS[s](cls=cls, sysr=sysr, hist=hist, reps=reps, results=res)
 
