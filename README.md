@@ -54,7 +54,10 @@ python3 analysis/summarize.py --only starv               # one section
 
 ## Metric notes
 
-- `D(i) = n_i + m_i` collapses to `n_i`: equal service times imply `m_i = 0`.
+- `D(i) = n_i + m_i` (Sandmann 2006): only `n_i` is recorded. Under equal
+  service, Sandmann's `m_i` (remaining service >= own) counts the whole queue
+  ahead even under FCFS, so it measures queue length, not size
+  discrimination; dropping it is a documented adaptation.
 - Politeness = seniority-respecting share of response time (adaptation of
   Wierman 2011 Def. 5 to equal deterministic service; documented in code).
 - RAQFM `E[D] = 0` identity and the Raz-2010 bound are checked per run (`bound_holds`).

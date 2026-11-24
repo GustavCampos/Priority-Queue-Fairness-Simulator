@@ -9,9 +9,12 @@ compared at analysis stage. Conventions:
 - Overtakings/displacement are arrival-order vs departure-order within the
   run (Whitt 1984; Avi-Itzhak et al. 2004); priority overtakes are
   intentional, so same-class and cross-class inversions are split.
-- Discrimination counts ``D(i) = n_i + m_i`` (Sandmann 2006) collapse to
-  ``n_i`` (later arrivals served before i) because equal service times imply
-  ``m_i = 0`` (no larger jobs); documented reinterpretation.
+- Discrimination counts ``D(i) = n_i + m_i`` (Sandmann 2006): only ``n_i``
+  (later arrivals served before i) is recorded. Sandmann's ``m_i`` counts
+  customers present at i's arrival with remaining service >= s_i that
+  finish first; under equal service that is the whole queue ahead (even
+  under FCFS), i.e. queue length rather than size discrimination, so it is
+  dropped. Documented adaptation, not an identity.
 - RAQFM ``D_i = S - int_{a_i}^{d_i} 1/N(t) dt`` (Raz et al. 2004, Eq.3
   p.132) uses the run's own occupancy ``N(t)``; class gap ``E[D(u)]`` and
   the bound ``(l_u/l)|E[D(u)]| <= sqrt(E[D^2])`` (Raz et al. 2010,
