@@ -19,6 +19,7 @@ its consecutive-priority history across idle periods, as production does.
 | `simulador/` | engine, policies, arrivals, metrics, CLI (`run.py`), tests |
 | `results/` | full factorial outputs: `summary_class.csv`, `summary_system.csv`, `wait_hist.csv.gz` (3600 runs) |
 | `results/validation/` | FCFS and strict priority, 300 independent seeds (1001-1300) per scenario, for the P-K / Cobham checks |
+| `results/robustness/` | robustness check: all 10 policies, 300 independent seeds (1001-1300), one sub-directory per mix (36000 runs) |
 | `analysis/` | aggregation script: every thesis table, bootstrap CIs, theory checks, conservation, starvation |
 
 ## Quickstart
@@ -38,9 +39,16 @@ python3 -m simulador.run --out results
 for m in M1 M2 M3; do python3 -m simulador.run --policies fcfs strict \
   --mix $m --reps 300 --seed0 1001 --out results/validation/$m; done
 
+# robustness data (all 10 policies, 300 seeds; ~1.5 h per mix, mixes in parallel)
+for m in M1 M2 M3; do python3 -m simulador.run --mix $m --reps 300 \
+  --seed0 1001 --out results/robustness/$m & done; wait
+
 # reproduce every thesis table from the archived CSVs (~40 s)
 python3 analysis/summarize.py --results results          # all sections
 python3 analysis/summarize.py --only starv               # one section
+
+# compare the thesis conclusions, 30 vs 300 replications (~2 min)
+python3 analysis/robustness.py --main results --robust results/robustness
 ```
 
 ## Reproduction contract
@@ -51,6 +59,14 @@ python3 analysis/summarize.py --only starv               # one section
 - `results/` in this repo is the exact dataset analyzed in the thesis
   (20k tickets + 2k warmup per run, 30 reps, M/D/1, mixes M1–M3,
   rho 0.50/0.75/0.90/0.95).
+- `results/robustness/` is a robustness check, not the analysed dataset. With
+  300 replications every significant paired difference of the 30-replication
+  data keeps its sign (1607/1607), the class-order inversions of P0(k=1) stay
+  in M3 only, P0(k>=2) has none, and all P-K (12/12) and Cobham (36/36) cells
+  fall inside the 95% CI. FCFS and strict rows are identical to
+  `results/validation/` (same seeds). Absolute means of the 30-replication data
+  at rho = 0.9 are about 3-4% above the 300-replication ones (seeds 1-30 drew
+  slightly heavier inputs), and paired differences shrink by a similar factor.
 
 ## Metric notes
 
