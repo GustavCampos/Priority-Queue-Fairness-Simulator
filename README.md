@@ -18,7 +18,8 @@ its consecutive-priority history across idle periods, as production does.
 |---|---|
 | `simulador/` | engine, policies, arrivals, metrics, CLI (`run.py`), tests |
 | `results/` | full factorial outputs: `summary_class.csv`, `summary_system.csv`, `wait_hist.csv.gz` (3600 runs) |
-| `analysis/` | portable aggregation script (tables + paired bootstrap CIs) |
+| `results/validation/` | FCFS and strict priority, 300 independent seeds (1001-1300) per scenario, for the P-K / Cobham checks |
+| `analysis/` | aggregation script: every thesis table, bootstrap CIs, theory checks, conservation, starvation |
 
 ## Quickstart
 
@@ -33,8 +34,13 @@ python3 -m simulador.run --n 2000 --warmup 200 --reps 2 \
 # full protocol: 10 policies x 3 mixes x 4 rhos x 30 reps (~25 min)
 python3 -m simulador.run --out results
 
-# reproduce the thesis tables from the archived CSVs
-python3 analysis/summarize.py --results results
+# extended validation data (FCFS + strict, 300 seeds; ~20 min per mix)
+for m in M1 M2 M3; do python3 -m simulador.run --policies fcfs strict \
+  --mix $m --reps 300 --seed0 1001 --out results/validation/$m; done
+
+# reproduce every thesis table from the archived CSVs (~40 s)
+python3 analysis/summarize.py --results results          # all sections
+python3 analysis/summarize.py --only starv               # one section
 ```
 
 ## Reproduction contract
@@ -52,9 +58,11 @@ python3 analysis/summarize.py --results results
 - Politeness = seniority-respecting share of response time (adaptation of
   Wierman 2011 Def. 5 to equal deterministic service; documented in code).
 - RAQFM `E[D] = 0` identity and the Raz-2010 bound are checked per run (`bound_holds`).
-- `--starv`/`--target` default `900.0` = PLACEHOLDER. The system is
-  pre-production (no operational mean service time); calibrate as
-  `15 min / S` post-deployment.
+- `--starv`/`--target` default `900.0` is not used by the thesis: the
+  system has no operational estimate of the service time S, so
+  starvation (wait >= 15 min, PegaFila dashboard threshold) is computed
+  in `analysis/summarize.py --only starv` from `wait_hist.csv.gz` for
+  S in {1, 2, 3, 5} min (threshold 15/S units, exact at bin edges).
 
 ## License
 

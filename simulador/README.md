@@ -71,7 +71,15 @@ python3 -m simulador.run --out results
   zero-overtake, no-duplicate/lost, work conservation, total wait
   identical across all policies (sample-path conservation), determinism,
   RAQFM identities, wait histogram.
-- M/D/1 theory check (FCFS, single rep): ρ=0.5 → sim 0.506 vs 0.500;
-  ρ=0.9 → sim 4.649 vs 4.500 (P-K formula). Matches.
+- Theory checks (`analysis/summarize.py --only pk cobham validation`):
+  FCFS overall mean wait vs Pollaczek-Khinchine (M/D/1) and Estrita
+  per-class mean wait vs Cobham (1954), with 95% CIs. On the 30 main
+  replications (seeds 1-30) the theory falls just outside the CI at
+  rho = 0.75 and 0.90 (FCFS +1.8% and +4.1%); an independent Lindley
+  recursion gives the same values on those seeds, so this is sampling
+  variation of the 30 seeds, not a simulator bias. On 300 independent
+  replications (seeds 1001-1300, `results/validation/`) the theory is
+  inside the CI in all 12 P-K and all 36 Cobham cells (max error +1.42%,
+  at rho = 0.95).
 - Smoke mixes/loads produce the expected ordering effect (strict widens
   class gaps vs FCFS; APQ-soft stays near FCFS).
