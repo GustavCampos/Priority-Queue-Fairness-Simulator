@@ -1,21 +1,17 @@
-"""Robustness check: do the article's conclusions hold with 300 replications?
+"""Compare the preliminary run (30 replications) with the analysed one (300).
 
 Usage:
-    python3 analysis/robustness.py --main results --robust results/robustness
+    python3 analysis/robustness.py --prelim results/preliminary-30 --main results
 
-``--main`` is the analysed experiment (30 replications, seeds 1-30).
-``--robust`` holds one sub-directory per mix (M1, M2, M3), each the full set
-of 10 policies x 4 loads with 300 independent replications (seeds 1001-1300,
-the same seeds as results/validation/, so FCFS and Estrita must reproduce the
-validation data exactly).
-
-Every check prints the 30-replication value next to the 300-replication one.
-Qualitative claims are marked SAME / CHANGED. Stdlib only.
+``results/`` is the analysed experiment: 10 policies x 3 mixes x 4 loads x 300
+replications (seeds 1001-1300). ``results/preliminary-30/`` is the earlier run
+with 30 replications (seeds 1-30), kept for transparency. Every check prints
+the 30-replication value next to the 300-replication one; qualitative claims
+are marked SAME / CHANGED. Stdlib only.
 """
 from __future__ import annotations
 
 import argparse
-import csv
 import sys
 from itertools import combinations
 from pathlib import Path
@@ -28,17 +24,6 @@ SC = S.scenarios()
 
 
 # ---------------------------------------------------------------- loading
-def load_split(root: Path):
-    """Merge per-mix sub-directories into one (cls, sysr, hist)."""
-    cls, sysr, hist = {}, {}, {}
-    for m in MIXES:
-        c, s = S.load(root / m)
-        cls.update(c)
-        sysr.update(s)
-        hist.update(S.load_hist(root / m))
-    return cls, sysr, hist
-
-
 class Data:
     def __init__(self, label, cls, sysr, hist):
         self.label, self.cls, self.sysr, self.hist = label, cls, sysr, hist
@@ -67,21 +52,6 @@ def line(title, a, b, same=None):
 
 
 # ----------------------------------------------------------------- checks
-def c_determinism(rob_root: Path, val_root: Path):
-    S.header("Determinism: FCFS and Estrita rows equal results/validation/ (seeds 1001-1300)")
-    if not val_root.is_dir():
-        print("  (no validation directory)")
-        return
-    for m in MIXES:
-        for f in ("summary_class.csv", "summary_system.csv"):
-            def rows(path):
-                with open(path) as fh:
-                    return {tuple(r) for r in csv.reader(fh)
-                            if r and r[0] in ("FCFS", "P0(k=inf)")}
-            a, b = rows(rob_root / m / f), rows(val_root / m / f)
-            print(f"  {m} {f:20s} rows {len(a):5d} vs {len(b):5d}  identical: {a == b}")
-
-
 def c_integrity(d30, d300):
     S.header("Integrity and conservation")
     for d in (d30, d300):
@@ -275,14 +245,12 @@ def c_starv(d30, d300):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--prelim", default="results/preliminary-30")
     ap.add_argument("--main", default="results")
-    ap.add_argument("--robust", default="results/robustness")
-    ap.add_argument("--validation", default="results/validation")
     a = ap.parse_args()
-    d30 = Data("30", *S.load(Path(a.main)), S.load_hist(Path(a.main)))
-    d300 = Data("300", *load_split(Path(a.robust)))
-    print(f"main: {len(d30.reps)} reps (seeds {min(d30.reps)}..), robust: {len(d300.reps)} reps")
-    c_determinism(Path(a.robust), Path(a.validation))
+    d30 = Data("30", *S.load(Path(a.prelim)), S.load_hist(Path(a.prelim)))
+    d300 = Data("300", *S.load(Path(a.main)), S.load_hist(Path(a.main)))
+    print(f"preliminary: {len(d30.reps)} reps, analysed: {len(d300.reps)} reps")
     c_integrity(d30, d300)
     c_theory(d30, d300)
     c_numbers(d30, d300)

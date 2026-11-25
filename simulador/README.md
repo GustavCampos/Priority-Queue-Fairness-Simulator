@@ -25,8 +25,9 @@ python3 -m unittest simulador.tests.test_sim
 python3 -m simulador.run --n 2000 --warmup 200 --reps 2 \
   --mix M2 --rho 0.9 --out /tmp/opencode/smoke
 
-# full protocol (Etapa 5 defaults): 3600 runs, ~25 min
-python3 -m simulador.run --out results
+# full protocol as analysed: 36000 runs (300 reps, seeds 1001-1300), ~4.5 h
+python3 -m simulador.run --reps 300 --seed0 1001 --out results
+# CLI defaults (30 reps, seed0 1) reproduce the preliminary run, results/preliminary-30/
 ```
 
 ## Outputs (`--out`)
@@ -71,15 +72,14 @@ python3 -m simulador.run --out results
   zero-overtake, no-duplicate/lost, work conservation, total wait
   identical across all policies (sample-path conservation), determinism,
   RAQFM identities, wait histogram.
-- Theory checks (`analysis/summarize.py --only pk cobham validation`):
-  FCFS overall mean wait vs Pollaczek-Khinchine (M/D/1) and Estrita
-  per-class mean wait vs Cobham (1954), with 95% CIs. On the 30 main
-  replications (seeds 1-30) the theory falls just outside the CI at
-  rho = 0.75 and 0.90 (FCFS +1.8% and +4.1%); an independent Lindley
-  recursion gives the same values on those seeds, so this is sampling
-  variation of the 30 seeds, not a simulator bias. On 300 independent
-  replications (seeds 1001-1300, `results/validation/`) the theory is
-  inside the CI in all 12 P-K and all 36 Cobham cells (max error +1.42%,
-  at rho = 0.95).
+- Theory checks (`analysis/summarize.py --only pk cobham`): FCFS overall
+  mean wait vs Pollaczek-Khinchine (M/D/1) and Estrita per-class mean wait
+  vs Cobham (1954), with 95% CIs. On the 300 analysed replications (seeds
+  1001-1300) the theory is inside the CI in all 12 P-K and all 36 Cobham
+  cells (max error +1.42%, at rho = 0.95). On the preliminary 30
+  replications (seeds 1-30) it fell just outside at rho = 0.75 and 0.90
+  (FCFS +1.8% and +4.1%); an independent Lindley recursion
+  (`--only lindley`) gives the same values on those seeds, so that was
+  sampling variation of the 30 shared seeds, not a simulator bias.
 - Smoke mixes/loads produce the expected ordering effect (strict widens
   class gaps vs FCFS; APQ-soft stays near FCFS).

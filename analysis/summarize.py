@@ -17,12 +17,14 @@ Sections (default: all, in this order):
     claims      numbers quoted in the text: k share of strict effect, spread
                 across policies, minimum tail/variance, politeness by class
     latex       table rows / figure coordinates for the article (pt-BR)
-    validation  P-K and Cobham again on results/validation/<mix>/ (FCFS and
-                Estrita, 300 independent seeds 1001-1300), if present
+    lindley     independent M/D/1 FCFS check by the Lindley recursion on the
+                same arrivals (slow, ~5 min; not in the default run)
 
 Conventions: waits are in units of the service time S (S = 1). Means are
-over the 30 replications; a CI is a percentile bootstrap over replications
-(B = 2000, fixed seed), paired by seed for differences.
+over the 300 replications (seeds 1001-1300); a CI is a percentile bootstrap
+over replications (B = 2000, fixed seed), paired by seed for differences.
+results/preliminary-30/ holds the preliminary 30-replication run (seeds 1-30);
+the same script runs on it with --results results/preliminary-30.
 """
 from __future__ import annotations
 
@@ -312,33 +314,18 @@ def paired_cls(cls, pol, mix, rho, a, b, reps):
                     for r in reps])
 
 
-def s_validation(results, **_):
-    vdir = results / "validation"
-    if not vdir.is_dir():
-        print("\n(no results/validation/: skipping extended validation)")
-        return
-    cls, sysr = {}, {}
-    for d in sorted(p for p in vdir.iterdir() if p.is_dir()):
-        c, s = load(d)
-        cls.update(c)
-        sysr.update(s)
-    reps = reps_of(sysr)
-    title = f"\n  extended: {len(reps)} independent replications per scenario"
-    s_pk(sysr, reps, title=title)
-    s_cobham(cls, reps, title=title)
-    s_lindley(sysr_main=None)
-
-
-def s_lindley(results=None, sysr=None, reps=None, sysr_main=None, **_):
+def s_lindley(results, **_):
     """Independent M/D/1 FCFS check: Lindley recursion on the same arrivals."""
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from simulador.arrivals import MIXES as AMIX, generate
+    with open(results / "summary_system.csv") as f:
+        seeds = sorted({int(r["seed"]) for r in csv.DictReader(f)})
     header("Independent check: Lindley recursion W_{n+1} = max(0, W_n + S - A_{n+1}),"
-           " FCFS, seeds 1-30, n = 20000 after 2000 warm-up")
+           f" FCFS, seeds {seeds[0]}-{seeds[-1]}, n = 20000 after 2000 warm-up")
     for r in RHOS:
         means = []
-        for seed in range(1, 31):
+        for seed in seeds:
             free, ws = 0.0, []
             for t in generate(22000, r, AMIX["M2"], seed):
                 st = max(free, t.arrival)
@@ -439,39 +426,31 @@ def s_latex(cls, sysr, hist, reps, results, **_):
             pts.append(f"({r},{m_:.3f}) += (0,{hi - m_:.3f}) -= (0,{m_ - lo:.3f})")
         print(f"% {NAME[p]}\n" + " ".join(pts))
 
-    vdir = results / "validation"
-    if vdir.is_dir():
-        vcls, vsys = {}, {}
-        for d in sorted(x for x in vdir.iterdir() if x.is_dir()):
-            c, sy = load(d)
-            vcls.update(c)
-            vsys.update(sy)
-        vreps = reps_of(vsys)
-        ci = lambda t: f"{br(t[0], 3)} [{br(t[1], 3)}; {br(t[2], 3)}]"
-        print("\n% tab:validacao-pk  (rho, theory, 30 reps, 300 reps; FCFS overall)")
-        for r in RHOS:
-            print(f"{br(r)} & {br(r / (2 * (1 - r)), 3)} & "
-                  f"{ci(boot_ci([overall_mean(sysr, 'FCFS', 'M2', r, x) for x in reps]))} & "
-                  f"{ci(boot_ci([overall_mean(vsys, 'FCFS', 'M2', r, x) for x in vreps]))} \\\\")
-        print("\n% tab:validacao-cobham  (M2; rho, class, theory, 30 reps, 300 reps; Estrita)")
-        for r in RHOS:
-            th = cobham("M2", r)
-            for c in CLASSES:
-                print(f"{br(r)} & {c} & {br(th[c], 3)} & "
-                      f"{ci(boot_ci(per_rep(cls, 'P0(k=inf)', 'M2', r, c, 'mean', reps)))} & "
-                      f"{ci(boot_ci(per_rep(vcls, 'P0(k=inf)', 'M2', r, c, 'mean', vreps)))} \\\\")
-
+    ci = lambda t: f"{br(t[0], 3)} [{br(t[1], 3)}; {br(t[2], 3)}]"
+    err = lambda m_, th: ("+" if m_ >= th else "") + br(100 * (m_ - th) / th)
+    print("\n% tab:validacao-pk  (M2; rho, theory, mean [bootstrap 95% CI], error %; FCFS overall)")
+    for r in RHOS:
+        th = r / (2 * (1 - r))
+        b = boot_ci([overall_mean(sysr, 'FCFS', 'M2', r, x) for x in reps])
+        print(f"{br(r)} & {br(th, 3)} & {ci(b)} & {err(b[0], th)} \\\\")
+    print("\n% tab:validacao-cobham  (M2; rho, class, theory, mean [bootstrap 95% CI], error %; Estrita)")
+    for r in RHOS:
+        th = cobham("M2", r)
+        for c in CLASSES:
+            b = boot_ci(per_rep(cls, 'P0(k=inf)', 'M2', r, c, 'mean', reps))
+            print(f"{br(r)} & {c} & {br(th[c], 3)} & {ci(b)} & {err(b[0], th[c])} \\\\")
 
 SECTIONS = {"names": s_names, "integrity": s_integrity, "pk": s_pk,
             "cobham": s_cobham, "wait": s_wait, "tail": s_tail, "diffs": s_diffs,
             "order": s_order, "starv": s_starv, "inversion": s_inversion,
-            "claims": s_claims, "latex": s_latex, "validation": s_validation}
+            "claims": s_claims, "latex": s_latex, "lindley": s_lindley}
+DEFAULT = [k for k in SECTIONS if k != "lindley"]
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
-    ap.add_argument("--only", nargs="+", choices=list(SECTIONS), default=list(SECTIONS))
+    ap.add_argument("--only", nargs="+", choices=list(SECTIONS), default=DEFAULT)
     a = ap.parse_args()
     res = Path(a.results)
     cls, sysr = load(res)

@@ -17,10 +17,9 @@ its consecutive-priority history across idle periods, as production does.
 | Path | Content |
 |---|---|
 | `simulador/` | engine, policies, arrivals, metrics, CLI (`run.py`), tests |
-| `results/` | full factorial outputs: `summary_class.csv`, `summary_system.csv`, `wait_hist.csv.gz` (3600 runs) |
-| `results/validation/` | FCFS and strict priority, 300 independent seeds (1001-1300) per scenario, for the P-K / Cobham checks |
-| `results/robustness/` | robustness check: all 10 policies, 300 independent seeds (1001-1300), one sub-directory per mix (36000 runs) |
-| `analysis/` | aggregation script: every thesis table, bootstrap CIs, theory checks, conservation, starvation |
+| `results/` | analysed dataset: `summary_class.csv`, `summary_system.csv`, `wait_hist.csv.gz` (10 policies x 3 mixes x 4 rhos x 300 reps = 36000 runs, seeds 1001-1300) |
+| `results/preliminary-30/` | preliminary run with 30 reps (seeds 1-30, 3600 runs), kept for transparency; superseded for lack of precision of absolute means at high load |
+| `analysis/` | `summarize.py`: every thesis table, bootstrap CIs, theory checks, conservation, starvation; `robustness.py`: preliminary (30) vs analysed (300) comparison |
 
 ## Quickstart
 
@@ -32,23 +31,21 @@ python3 -m unittest simulador.tests.test_sim
 python3 -m simulador.run --n 2000 --warmup 200 --reps 2 \
   --mix M2 --rho 0.9 --out /tmp/smoke
 
-# full protocol: 10 policies x 3 mixes x 4 rhos x 30 reps (~25 min)
-python3 -m simulador.run --out results
+# full protocol: 10 policies x 3 mixes x 4 rhos x 300 reps (~4.5 h single process)
+python3 -m simulador.run --reps 300 --seed0 1001 --out results
+# (or one process per mix, --mix M1 / M2 / M3, ~1.5 h in parallel; the three
+#  CSVs concatenated in mix order, header once, equal the single-process files)
 
-# extended validation data (FCFS + strict, 300 seeds; ~20 min per mix)
-for m in M1 M2 M3; do python3 -m simulador.run --policies fcfs strict \
-  --mix $m --reps 300 --seed0 1001 --out results/validation/$m; done
+# preliminary run (30 reps, ~25 min)
+python3 -m simulador.run --out results/preliminary-30
 
-# robustness data (all 10 policies, 300 seeds; ~1.5 h per mix, mixes in parallel)
-for m in M1 M2 M3; do python3 -m simulador.run --mix $m --reps 300 \
-  --seed0 1001 --out results/robustness/$m & done; wait
-
-# reproduce every thesis table from the archived CSVs (~40 s)
+# reproduce every thesis table from the archived CSVs (~5 min)
 python3 analysis/summarize.py --results results          # all sections
 python3 analysis/summarize.py --only starv               # one section
+python3 analysis/summarize.py --only lindley             # independent FCFS check (slow)
 
-# compare the thesis conclusions, 30 vs 300 replications (~2 min)
-python3 analysis/robustness.py --main results --robust results/robustness
+# preliminary (30) vs analysed (300): does any conclusion change? (~1 min)
+python3 analysis/robustness.py
 ```
 
 ## Reproduction contract
@@ -57,16 +54,14 @@ python3 analysis/robustness.py --main results --robust results/robustness
   runs on copies, so replications are perfectly paired (common random numbers).
 - Rerun with same seeds reproduces the same service order (tested).
 - `results/` in this repo is the exact dataset analyzed in the thesis
-  (20k tickets + 2k warmup per run, 30 reps, M/D/1, mixes M1–M3,
-  rho 0.50/0.75/0.90/0.95).
-- `results/robustness/` is a robustness check, not the analysed dataset. With
-  300 replications every significant paired difference of the 30-replication
-  data keeps its sign (1607/1607), the class-order inversions of P0(k=1) stay
-  in M3 only, P0(k>=2) has none, and all P-K (12/12) and Cobham (36/36) cells
-  fall inside the 95% CI. FCFS and strict rows are identical to
-  `results/validation/` (same seeds). Absolute means of the 30-replication data
-  at rho = 0.9 are about 3-4% above the 300-replication ones (seeds 1-30 drew
-  slightly heavier inputs), and paired differences shrink by a similar factor.
+  (20k tickets + 2k warmup per run, 300 reps, seeds 1001-1300, M/D/1,
+  mixes M1–M3, rho 0.50/0.75/0.90/0.95).
+- `results/preliminary-30/` is the first run (30 reps, seeds 1-30). Its
+  absolute means at high load were not precise enough (Pollaczek-Khinchine
+  outside the 95% CI in 6/12 cells, one shared-seed deviation), so the
+  factorial was rerun with 300 reps. Every significant paired difference of
+  the preliminary run keeps its sign with 300 reps (1607/1607), and the
+  class-order inversions are the same; see `analysis/robustness.py`.
 
 ## Metric notes
 
